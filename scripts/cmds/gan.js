@@ -1,4 +1,4 @@
-const fs = require("fs");
+const fs = require("fs-extra");
 const axios = require("axios");
 const path = require("path");
 
@@ -7,7 +7,7 @@ let lastPlayed = -1;
 module.exports = {
   config: {
     name: "gan",
-    version: "5.2.0",
+    version: "5.3.0",
     role: 0,
     author: "MJ HAMIM",
     shortDescription: "Play songs by serial number 🎵",
@@ -63,8 +63,10 @@ module.exports = {
       { title: "Random Song 40", url: "https://files.catbox.moe/q4m2ad.mp3" }
     ];
 
-    // 📜 GAN LIST
-    if (args[0] && args[0].toLowerCase() === "list") {
+    const input = args[0] ? args[0].trim().toLowerCase() : "";
+
+    // 📜 LIST COMMAND
+    if (input === "list") {
       let msg = "🌷━━━━━━━━━━━━━━━━━━🌷\n";
       msg += "        🎵 Gᴀɴ Lɪsᴛ 🎵\n";
       msg += "🌷━━━━━━━━━━━━━━━━━━🌷\n\n";
@@ -84,8 +86,8 @@ module.exports = {
       }
 
       msg += "\n━━━━━━━━━━━━━━━━━━━━\n";
-      msg += "📌 Example: gan 1 | gan 2 | gan 3\n";
-      msg += "🎲 gan = Random Song\n\n";
+      msg += "📌 Example: /gan 1 | /gan 2 | /gan 3\n";
+      msg += "🎲 /gan = Random Song\n\n";
       msg += "🌷 Hᴀʏ ᴇᴛᴏ ᴄᴜᴛᴇ ᴠᴏɪᴄᴇ 🌷";
 
       return api.sendMessage(msg, threadID, messageID);
@@ -93,15 +95,15 @@ module.exports = {
 
     let index;
 
-    // 🎯 SERIAL COMMAND
-    if (args[0]) {
-      const choice = Number(args[0]);
+    // 🎯 SERIAL SELECTION
+    if (input !== "") {
+      const choice = parseInt(input);
 
-      if (!Number.isInteger(choice)) {
+      if (isNaN(choice)) {
         return api.sendMessage(
           "❌ Sʜᴜᴅʜᴜ sᴇʀɪᴀʟ ɴᴜᴍʙᴇʀ ᴅᴀᴡ!\n\n" +
-          "📌 Example: gan 1, gan 2, gan 3\n" +
-          "📜 List: gan list",
+          "📌 Example: /gan 1, /gan 2, /gan 3\n" +
+          "📜 List: /gan list",
           threadID,
           messageID
         );
@@ -109,7 +111,7 @@ module.exports = {
 
       if (choice < 1 || choice > songs.length) {
         return api.sendMessage(
-          `❌ Sᴇʀɪᴀʟ ᴍᴀᴛᴄʜ ᴋᴏʀᴇɴɪ!\n\n✅ Vᴀʟɪᴅ sᴇʀɪᴀʟ: 1-${songs.length}\n📜 List: gan list`,
+          `❌ Sᴇʀɪᴀʟ ᴍᴀᴛᴄʜ ᴋᴏʀᴇɴɪ!\n\n✅ Vᴀʟɪᴅ sᴇʀɪᴀʟ: 1-${songs.length}\n📜 List: /gan list`,
           threadID,
           messageID
         );
@@ -117,7 +119,7 @@ module.exports = {
 
       index = choice - 1;
     } else {
-      // 🎲 gan লিখলে random প্লে করবে
+      // 🎲 RANDOM SELECTION
       do {
         index = Math.floor(Math.random() * songs.length);
       } while (index === lastPlayed && songs.length > 1);
@@ -126,7 +128,7 @@ module.exports = {
     lastPlayed = index;
 
     const song = songs[index];
-    const ext = path.extname(song.url) || ".mp3";
+    const ext = song.url.endsWith(".mp4") ? ".mp4" : ".mp3";
     const cacheDir = path.join(__dirname, "cache");
 
     if (!fs.existsSync(cacheDir)) {
@@ -139,51 +141,30 @@ module.exports = {
       `🌷 Hᴀʏ ᴇᴛᴏ ᴄᴜᴛᴇ ᴠᴏɪᴄᴇ 🌷\n\n` +
       `🎵 Sᴏɴɢ: ${song.title}\n` +
       `🔢 Sᴇʀɪᴀʟ: ${index + 1}\n\n` +
-      `📌 Nᴇxᴛ Sᴏɴɢ Tʀʏ: gan 1, gan 2, gan 3\n` +
+      `📌 Nᴇxᴛ Sᴏɴɢ Tʀʏ: /gan 1, /gan 2\n` +
       `🎧 Eɴᴊᴏʏ Tʜᴇ Sᴏɴɢ 💗`;
 
     api.setMessageReaction("🎵", messageID, () => {}, true);
 
     try {
-      const response = await axios({
-        method: "GET",
-        url: song.url,
-        responseType: "stream",
-        timeout: 60000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0'
-        }
-      });
+      const res = await axios.get(song.url, { responseType: "arraybuffer" });
+      fs.writeFileSync(filePath, Buffer.from(res.data));
 
-      const writer = fs.createWriteStream(filePath);
-      response.data.pipe(writer);
-
-      writer.on("finish", () => {
-        api.sendMessage(
-          {
-            body: responseText,
-            attachment: fs.createReadStream(filePath)
-          },
-          threadID,
-          () => {
-            if (fs.existsSync(filePath)) {
-              fs.unlinkSync(filePath);
-            }
-          },
-          messageID
-        );
-      });
-
-      writer.on("error", (err) => {
-        console.error("Write Error:", err);
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        api.sendMessage("❌ Sᴏɴɢ sᴇɴᴅ ᴋᴏʀᴛᴇ ᴘᴀʀɪɴɪ!", threadID, messageID);
-      });
-
+      return api.sendMessage(
+        {
+          body: responseText,
+          attachment: fs.createReadStream(filePath)
+        },
+        threadID,
+        () => {
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        },
+        messageID
+      );
     } catch (err) {
-      console.error("Download Error:", err);
+      console.error("GoatBot Download Error:", err);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      api.sendMessage("⚠️ Sᴏɴɢ ᴅᴏᴡɴʟᴏᴀᴅ ʜᴏʏɴɪ!", threadID, messageID);
+      return api.sendMessage("⚠️ Sᴏɴɢ ᴅᴏᴡɴʟᴏᴀᴅ ʜᴏʏɴɪ! Link issue.", threadID, messageID);
     }
   }
 };
